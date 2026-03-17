@@ -1,0 +1,17 @@
+losses:
+  use_data_loss: true   # keep ALWAYS true (physics loss needs data loss to work)
+  use_physics_loss: false
+
+weights:
+  physics_weight: 0.001          # used only when use_adaptive_weight is false
+  use_adaptive_weight: false    # if true, physics_weight is ignored; weight = clamp(L_phys/L_data, 0.01, 10)
+  use_config: true             # if true, ConFIG gradient method is used instead of weighted sum (requires use_physics_loss: true)
+
+# Per-channel weights for data_loss
+# Order: [x, y, z, roll, pitch, yaw, vx, vy, vz, w_roll, w_pitch, w_yaw]
+# Increase a weight to penalise errors on that channel more heavily.
+data_channel_weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] #[1.0, 1.0, 1.0, 5.0, 5.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+
+# Per-channel weights for physics_loss
+# Order: [x_dot, y_dot, z_dot, vx_dot, vy_dot, vz_dot, w_roll_dot, w_pitch_dot, w_yaw_dot]
+physics_channel_weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] #[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]

@@ -1,0 +1,4 @@
+Physical_parameters:
+  mass: 2.0  # mass of the drone [kg]
+  inertia: [0.0217, 0.0217, 0.04]  # inertia around roll (Ixx), pitch (Iyy), yaw (Izz) [kg*m^2]
+  g: 9.81  # gravity [m/s^2]

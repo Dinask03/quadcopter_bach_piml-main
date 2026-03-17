@@ -1,0 +1,1 @@
+from .loss_functions import data_loss, physics_loss

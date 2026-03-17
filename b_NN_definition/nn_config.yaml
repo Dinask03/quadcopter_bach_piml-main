@@ -1,0 +1,7 @@
+
+NN_architecture:
+  n_input : 16  # angular positions (represented with sin,cos components) (6), linear and angular velocities (6) + control inputs (4)
+  n_output : 12  # linear and angular velocities rates, linear positions rates, angular positions rate (12)
+  hidden_layers_size : [128, 96, 64, 32] # the more the hidden layers, the more complex functions can be approximated, the more the neurons per layer, the more complex functions can be approximated 64,64
+  activation_fn : Tanh # ReLU, LeakyReLU, Tanh, Sigmoid, Softplus, GELU, SILU/SWISH,
+  #use_layer_norm : true 
