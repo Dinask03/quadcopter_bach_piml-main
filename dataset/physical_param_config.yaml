@@ -2,3 +2,11 @@ Physical_parameters:
   mass: 2.0  # mass of the drone [kg]
   inertia: [0.0217, 0.0217, 0.04]  # inertia around roll (Ixx), pitch (Iyy), yaw (Izz) [kg*m^2]
   g: 9.81  # gravity [m/s^2]
+  thrust_min: -35 # remember that we are using the NED frame, so the thrust is negative in the z direction
+  thrust_max: -15
+  torque_roll_min: -0.5
+  torque_roll_max: 0.5
+  torque_pitch_min: -0.5
+  torque_pitch_max: 0.5
+  torque_yaw_min: -0.25
+  torque_yaw_max: 0.25
