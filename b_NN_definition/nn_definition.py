@@ -3,23 +3,33 @@ import torch.nn as nn
 
 class ResidualBModel(nn.Module):
     """
-    Residual B:
-    x_hat = x0 + h * ( f(x0,u) + h * T^{-1}( corr_net(z) ) )
+    Physics-informed residual model.
 
-    corr_net(z) outputs a 12-dim correction in *normalized* derivative space.
-    T is a diagonal scaling used to normalize targets; T^{-1} maps back to physical units.
+    Input:  [sin/cos(roll,pitch,yaw), v(3), w(3), u(4)]  -> (B,16)
+    Output: derivative corrections [v̇_corr(3), ω̇_corr(3)] -> (B,6)
+            (units: m/s² for linear, rad/s² for angular)
+
+    The NN corrects the physics derivative directly:
+        v̇_total = v̇_phys + v̇_corr
+        ω̇_total = ω̇_phys + ω̇_corr
+    This is dt-agnostic: the same correction is valid for any step size.
     """
-    def __init__(self, hidden_layers_size, activation_fn):
-        super(ResidualBModel, self).__init__()
-        n_state = 12
+    def __init__(self, hidden_layers_size, activation_fn,
+                 output_activation=nn.Identity, dropout_rate=0.0):
+        super().__init__()
+        self.n_out = 6  # v̇_corr (3) + ω̇_corr (3)
         n_control = 4
-        n_input = 6 + 3 + 3 + n_control # sin/cos angles + linear velocities + angular velocities + control inputs
+        n_input = 6 + 3 + 3 + n_control  # sin/cos angles + v(3) + w(3) + u(4) = 16
 
         layers = [nn.Linear(n_input, hidden_layers_size[0]), activation_fn()]
+        if dropout_rate > 0.0:
+            layers.append(nn.Dropout(p=dropout_rate))
         for i in range(len(hidden_layers_size) - 1):
-            layers.append(nn.Linear(hidden_layers_size[i], hidden_layers_size[i+1]))
-            layers.append(activation_fn())
-        layers.append(nn.Linear(hidden_layers_size[-1], n_state))
+            layers += [nn.Linear(hidden_layers_size[i], hidden_layers_size[i + 1]), activation_fn()]
+            if dropout_rate > 0.0:
+                layers.append(nn.Dropout(p=dropout_rate))
+
+        layers += [nn.Linear(hidden_layers_size[-1], self.n_out), output_activation()]
         self.corr_net = nn.Sequential(*layers)
 
         for m in self.corr_net.modules():
@@ -28,47 +38,24 @@ class ResidualBModel(nn.Module):
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
 
-        if T_inv is None:
-            self.register_buffer('T_inv', torch.ones(self.n_state))
-        else:
-            T_inv = torch.as_tensor(T_inv, dtype=torch.float32)
-            self.register_buffer('T_inv', T_inv)
+    @staticmethod
+    def build_features(state_vector, control_input):
+        """
+        state_vector: (B,12) [x,y,z, roll,pitch,yaw, vx,vy,vz, w_roll,w_pitch,w_yaw]
+        control_input: (B,4)
+        returns features z: (B,16) = [sin/cos(roll,pitch,yaw), v(3), w(3), u(4)]
+        """
+        roll, pitch, yaw = state_vector[:, 3], state_vector[:, 4], state_vector[:, 5]
+        trig = torch.stack([
+            torch.sin(roll), torch.cos(roll),
+            torch.sin(pitch), torch.cos(pitch),
+            torch.sin(yaw), torch.cos(yaw),
+        ], dim=1)  # (B,6)
+        v = state_vector[:, 6:9]   # (B,3)
+        w = state_vector[:, 9:12]  # (B,3)
+        return torch.cat([trig, v, w, control_input], dim=1)  # (B,16)
 
-    def build_features(state_vector, control_input): # For the input to the correction network
-            """
-            state_vector: (B,12) [x,y,z, roll,pitch,yaw, vx,vy,vz, w_roll,w_pitch,w_yaw]
-            control_input: (B,4)
-            features z: (B,16) = [sin/cos(roll,pitch,yaw), v(3), w(3), u(4)]
-            """
-            roll = state_vector[:, 3]
-            pitch = state_vector[:, 4]
-            yaw = state_vector[:, 5]
-
-            trig = torch.stack([ # sin/cos of angles to help the network learn periodicity and avoid discontinuities at +-pi
-                torch.sin(roll), torch.cos(roll),
-                torch.sin(pitch), torch.cos(pitch),
-                torch.sin(yaw), torch.cos(yaw),
-            ], dim=1)  # (B,6)
-
-            v = state_vector[:, 6:9]     # (B,3)
-            w = state_vector[:, 9:12]    # (B,3)
-
-            z = torch.cat([trig, v, w, control_input], dim=1)  # (B,16)
-            return z
-
-    def forward(self, state0, control_input, h, f0): 
-        # state0 is the initial state, f0 is the system dynamics, h is the time step
-        if not torch.is_tensor(h): # ensure h is a tensor for consistent device and dtype handling
-            h = torch.tensor(h, device=state0.device, dtype=state0.dtype)
-        if h.ndim == 0: # scalar, make it (1,1) for broadcasting
-            h = h.view(1, 1)  # broadcast later
-        elif h.ndim == 1:
-            h = h.view(-1, 1)
-
-        z = self.build_features(state0, control_input)    # (B,16)
-        corr_norm = self.corr_net(z)                     # (B,12) in normalized space
-        corr = corr_norm * self.T_inv                    # apply T^{-1} (diagonal)
-
-        x_hat = state0 + h * (f0 + h * corr)
-        return x_hat, corr
+    def forward(self, state_vector, control_input):
+        z = self.build_features(state_vector, control_input)
+        return self.corr_net(z)  # (B,6): [v̇_corr(3), ω̇_corr(3)]
 
