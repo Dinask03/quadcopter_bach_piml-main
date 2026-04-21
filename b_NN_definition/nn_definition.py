@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import numpy as np
 
 class ResidualBModel(nn.Module):
     """
@@ -15,7 +14,7 @@ class ResidualBModel(nn.Module):
         ω̇_total = ω̇_phys + ω̇_corr
     This is dt-agnostic: the same correction is valid for any step size.
     """
-    def __init__(self, hidden_layers_size, activation_fn, S=None,
+    def __init__(self, hidden_layers_size, activation_fn,
                  output_activation=nn.Identity, dropout_rate=0.0):
         super().__init__()
         self.n_out = 6  # v̇_corr (3) + ω̇_corr (3)
